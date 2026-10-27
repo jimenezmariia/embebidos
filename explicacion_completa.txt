@@ -1,0 +1,75 @@
+========================================================================
+EXPLICACIÓN COMPLETA DEL CÓDIGO - PRÁCTICA STM32F103 (BLUE PILL)
+========================================================================
+
+¿QUÉ HACE ESTE PROGRAMA?
+Básicamente, el microcontrolador se queda "escuchando" un botón conectado al pin PA3. Cuando detecta que lo has apretado y soltado 2 veces completas, apaga el LED que estaba prendido y prende el que estaba apagado (intercambia los pines PA4 y PA6).
+
+A continuación, vamos a desarmar el código pieza por pieza.
+
+------------------------------------------------------------------------
+PARTE 1: EL "DICCIONARIO" (Los #define)
+------------------------------------------------------------------------
+El microcontrolador tiene millones de transistores agrupados en "cajitas de memoria" (registros). Cada cajita tiene una dirección hexadecimal larguísima (como 0x40021000). Como nadie puede memorizar eso, usamos "#define" para ponerles etiquetas o apodos fáciles de leer.
+
+- RCC_CR y RCC_CFGR: Son el centro de control del reloj (la velocidad). Como te expliqué antes, aquí encendemos el PLL y le ponemos el multiplicador x4.
+- RCC_APB2ENR: Es la "caja de fusibles". Aunque el micro esté prendido, sus puertos (pines) vienen apagados para ahorrar pila. Aquí mandamos la orden de mandarle corriente al Puerto A.
+- GPIOA_CRL: Es el "manual de instrucciones". Aquí le decimos al micro: "Oye, el pin 3 va a ser entrada, y el 4 y 6 van a ser salida".
+- GPIOA_IDR (Input Data): Son los sensores. El micro asoma la cabeza por aquí para LEER si afuera hay voltaje (botón suelto) o no hay voltaje (botón apretado).
+- GPIOA_ODR (Output Data): Es el interruptor de la luz. El micro ESCRIBE aquí para sacar voltaje (prender el LED) o cortar el voltaje (apagar el LED).
+
+- DELAY: Es un truco. Es un ciclo "for" que cuenta hasta 40,000 pero no hace nada útil. Lo usamos para "perder el tiempo" unas fracciones de segundo. ¿Por qué? Porque cuando aprietas un botón físico, las laminitas de metal chocan y rebotan, creando chispas invisibles. Si no perdemos un poquito de tiempo, el micro, que es rapidísimo, pensaría que apretaste el botón 20 veces en un milisegundo.
+
+------------------------------------------------------------------------
+PARTE 2: ARRANCANDO EL MOTOR (Configuración Inicial)
+------------------------------------------------------------------------
+Dentro de "int main(void)", lo primero que creamos son dos variables:
+- "i": solo sirve para que el DELAY pueda contar.
+- "pulsos": es la memoria donde anotaremos cuántas veces has apretado el botón. Empieza en 0.
+
+Luego, viene la parte del reloj (PLL) que ya te expliqué a detalle. Le metemos 4 MHz, le decimos que lo multiplique por 4 (0x00080000), lo encendemos y esperamos a que el sistema reconozca que ahora vamos a 16 MHz.
+
+------------------------------------------------------------------------
+PARTE 3: PREPARANDO LOS PINES (El Puerto A)
+------------------------------------------------------------------------
+1. RCC_APB2ENR |= 0x04;
+Le mandamos energía eléctrica al Puerto A para que despierte.
+
+2. GPIOA_CRL &= 0xF0F00FFF; 
+Esta línea actúa como un "borrador". Limpia cualquier configuración vieja o basura que tuvieran los pines 3, 4 y 6 de fábrica, dejándolos en blanco para que nosotros escribamos nuestras reglas.
+
+3. GPIOA_CRL |= 0x02028000;
+Esta es la regla nueva. Los números "2" le dicen a los pines 4 y 6 que sean "Salidas que avientan voltaje". El número "8" le dice al pin 3 que sea "Entrada con una resistencia de seguridad (Pull-up)".
+
+4. Configurando cómo inician (GPIOA_ODR):
+- (1 << 3): Esta escritura rara significa "apunta directamente al pin número 3". Le mandamos un 1 para prender su resistencia interna de seguridad (Pull-up). Esto hace que cuando el botón no se esté apretando, el micro lea un '1' limpio, en lugar de leer estática del aire.
+- (1 << 4) con |= : Prende el LED del pin 4. (Estado inicial).
+- (1 << 6) con &= ~ : Apaga el LED del pin 6. Así nos aseguramos de que empiecen como dice tu tarea: uno prendido y el otro apagado.
+
+------------------------------------------------------------------------
+PARTE 4: EL CEREBRO DEL PROGRAMA (while(1))
+------------------------------------------------------------------------
+El "while(1)" es un bucle infinito. El micro se va a quedar dando vueltas aquí para siempre, vigilando el botón.
+
+PASO A: ¿Apretaron el botón?
+"if((GPIOA_IDR & (1 << 3)) == 0)"
+- Como le pusimos la resistencia (Pull-up), el botón normalmente da '1'.
+- Cuando tú lo aprietas y lo conectas a tierra, se vuelve '0'.
+- El "& (1 << 3)" es como usar unos lentes especiales (un filtro) que ignoran todos los demás pines y solo miran al pin 3. Si ve que es igual a 0, ¡significa que lo apretaste!
+
+PASO B: Antirrebote y soltar
+- Ejecutamos el "DELAY" para ignorar las chispas del rebote metálico.
+- "while((GPIOA_IDR & (1 << 3)) == 0);" -> Esta línea es una trampa mortal. Dice: MIENTRAS sigas leyendo un 0 (botón apretado), QUÉDATE AQUÍ ATRAPADO. Esto evita que la cuenta suba a 1000 por dejar el dedo puesto. Solo te soltará cuando quites el dedo (y cambie a 1).
+- Volvemos a hacer "DELAY" por si el botón rebotó al soltarse.
+
+PASO C: Contar
+"pulsos++;"
+¡Felicidades! Apretaste el botón, superaste las trampas de rebote y lo soltaste. Anotamos "+1" en nuestra libreta.
+
+PASO D: ¿Ya es hora de cambiar los LEDs?
+"if(pulsos == 2)"
+Si nuestra cuenta llegó a 2, ¡es hora de actuar!
+- GPIOA_ODR ^= (1 << 4);
+- GPIOA_ODR ^= (1 << 6);
+El símbolo ^= (se llama XOR) es una maravilla. Funciona exactamente igual que el interruptor de la luz de tu cuarto. No le importa si la luz estaba prendida o apagada; simplemente la cambia al estado contrario. Así intercambiamos los LEDs fácilmente.
+- Finalmente hacemos "pulsos = 0" para borrar la libreta y volver a empezar a contar para la próxima vez.
