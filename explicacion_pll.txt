@@ -1,0 +1,28 @@
+¿QUÉ ES EL PLL?
+----------------
+PLL significa "Phase-Locked Loop" (Bucle de enganche de fase). Pero para entenderlo fácil: imagina que el PLL es la "caja de velocidades" o el "acelerador" de tu microcontrolador.
+
+El microcontrolador trae de fábrica un reloj interno (llamado HSI) que late a una velocidad fija de 8 MHz. Sin embargo, a veces necesitamos que la placa trabaje mucho más rápido (tu maestro pidió 18 MHz). 
+
+Como no podemos cambiar la pieza física que late a 8 MHz, usamos el PLL. El PLL toma esa velocidad base bajita, la mete a su "caja de engranajes electrónicos" y la multiplica para sacar una velocidad mucho más alta.
+
+
+¿CÓMO MULTIPLICA EN TU CÓDIGO?
+------------------------------
+Hay una regla en el STM32: antes de que los 8 MHz entren al PLL, el sistema los divide entre 2 por seguridad. Entonces, al PLL realmente le están entrando 4 MHz.
+
+Aquí es donde entran tus dos líneas de código:
+
+LÍNEA 1: RCC_CFGR = 0x00080000;
+Esta es la palanca de cambios. 
+El código "0x00080000" es el lenguaje máquina para decirle al microcontrolador: "Quiero que el engranaje del PLL se ponga en el multiplicador x4". 
+Como le entraron 4 MHz, hace la multiplicación matemática: 4 MHz * 4 = 16 MHz. (Elegimos 16 MHz porque es matemáticamente lo más cercano que podemos llegar a los 18 MHz que te pidieron usando el reloj interno).
+
+LÍNEA 2: RCC_CR |= 0x01000000;
+Este es el botón de encendido.
+En la línea anterior solo acomodamos los engranajes, pero el motor del PLL seguía apagado. El código "0x01000000" va directamente al registro de control (CR) y presiona el interruptor interno que dice "PLL ON" (Encender PLL). 
+
+En resumen:
+1. Le entran 4 MHz al PLL.
+2. La primera línea le dice "Multiplícalo por 4".
+3. La segunda línea le dice "¡Enciéndete y empieza a trabajar a 16 MHz!".
